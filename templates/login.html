@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}
+Login
+{% endblock %}
+
+{% block content %}
+    <form id="login-form">
+        <input type="email" id="email" placeholder="Your Email">
+        <button type="submit">Send Magic Link</button>
+    </form>
+
+    <script>
+        document.getElementById('login-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+            var email = document.getElementById('email').value;
+            
+            // Send magic link to the provided email
+            $.post("/api/send_magic_link", { email: email })
+                .done(function(data) {
+                    alert("Magic link sent! Check your email.");
+                });
+        });
+    </script>
+{% endblock %}

@@ -1,0 +1,109 @@
+/*
+Written in 2023 by Theodore Jones tjones2@fastmail.com 
+To the extent possible under law, the author(s) have dedicated all copyright 
+and related and neighboring rights to this software to the public domain worldwide. 
+This software is distributed without any warranty. 
+http://creativecommons.org/publicdomain/zero/1.0/.
+*/
+
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #F2F2F2;
+}
+
+/* This styles the header */
+header {
+    background-color: #333;
+    color: #fff;
+    padding: 10px 0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+nav ul {
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: space-around;
+}
+
+nav ul li a {
+    color: #fff;
+    text-decoration: none;
+    font-size: 1.2em;
+}
+
+nav ul li a:hover {
+    color: #ddd;
+}
+
+.container {
+    width: 80%;
+    margin: auto;
+    padding: 20px;
+}
+
+h1, p {
+    color: #333;
+}
+
+form {
+    background-color: #FFFFFF;
+    padding: 20px;
+    border-radius: 5px;
+    margin-bottom: 20px;
+}
+
+input[type="name"], input[type="url"] {
+    width: 70%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    margin-bottom: 10px;
+}
+
+button {
+    background-color: #4CAF50;
+    color: white;
+    padding: 10px 20px;
+    margin: 10px 0;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #45a049;
+}
+
+#feeds {
+    background-color: #FFFFFF;
+    padding: 20px;
+    border-radius: 5px;
+}
+
+#feeds ul {
+    list-style-type: none;
+    padding-left: 0;
+}
+
+#feeds li {
+    padding: 10px;
+    border-bottom: 1px solid #ddd;
+}
+
+#feeds li:last-child {
+    border-bottom: none;
+}
+
+#smtp-warning {
+    margin: 0;
+    padding: 15px;
+    color: #fff;
+    background-color: #f44336;
+    text-align: center;
+    font-size: 16px;
+    font-weight: bold;
+}

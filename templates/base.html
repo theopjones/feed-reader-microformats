@@ -1,0 +1,66 @@
+{# Written in 2023 by Theodore Jones tjones2@fastmail.com #}
+{# To the extent possible under law, the author(s) have dedicated all copyright #}
+{# and related and neighboring rights to this software to the public domain worldwide. #}
+{# This software is distributed without any warranty. #}
+{# http://creativecommons.org/publicdomain/zero/1.0/. #}
+
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>{% block title %}{% endblock %}</title>
+        <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='styles.css') }}">
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    </head>
+    <body>
+        <header>
+            <nav id="main-nav">
+                <ul>
+                    <li><a href="{{ url_for('manage_feeds_route') }}">Manage Feeds</a></li>
+                    <li><a href="{{ url_for('settings_route') }}">Settings</a></li>
+                    <li><a href="{{ url_for('login_route') }}">Login</a></li>
+                    <li><a href="{{ url_for('logout_route') }}">Logout</a></li>
+                    <!-- Add more links here as needed -->
+                </ul>
+            </nav>
+        </header>
+
+        <div id="smtp-warning" style="display: none; padding: 10px; background-color: #f44336; color: white; text-align: center;">
+            Warning: SMTP settings are not set. Feed Digests will not be emailed until this is corrected.
+        </div>
+
+        <div class="container">
+            {% block content %}{% endblock %}
+        </div>
+
+        <script>
+            // Add this script at the end of your <body> tag
+            $.get("/api/is_smtp_data_set")
+                .done(function(data) {
+                    if(!data.is_smtp_data_set) {
+                        // Show warning banner if SMTP settings are not set
+                        $('#smtp-warning').show();
+                    }
+                });
+        </script>
+
+        <script>
+$(document).ready(function(){
+    // Check if the current page is not login page
+    if (!window.location.href.includes("/login")) {
+        $.get("/api/has_valid_api_key")
+        .done(function(data, textStatus, xhr){
+            if(xhr.status === 200){
+                // Hide login link if user is logged in
+                $('#main-nav li:nth-child(3)').hide();
+            }
+        })
+        .fail(function(jqXHR, textStatus, errorThrown){
+            if(jqXHR.status === 401){
+                window.location.href = "{{ url_for('login_route') }}";
+            }
+        });
+    }
+});
+        </script>
+    </body>
+</html>

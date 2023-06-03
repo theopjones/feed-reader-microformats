@@ -1,0 +1,8 @@
+Flask
+Mongita
+feedparser
+mf2py
+requests
+beautifulsoup4
+uwsgi
+waitress

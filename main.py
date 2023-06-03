@@ -15,6 +15,7 @@ from functools import wraps
 import datetime
 import threading
 import time
+import sys
 
 import feedparser
 import mf2py
@@ -32,6 +33,9 @@ import hashlib
 import uuid
 
 import random
+
+from waitress import serve
+
 
 users_currently_authenticating = {}
 
@@ -339,10 +343,122 @@ def destroy_api_key(user_id, api_collection):
         # Delete the specific record from the collection
         api_collection.delete_one({"user_id": user_id})
 
+def get_domain_from_db(domaincollection):
+    #check for the case where there is no domain in the db
+    if len(list(domaincollection.find( {}))) == 0:
+        return None
+    domain_output = list(domaincollection.find( {}))
+    domain = domain_output[0].pop('domain')
+    return domain
 
+def initial_setup_check(app):
+    if not is_any_email_in_db(app.email_collection):
+        return False
+    return True
 
-def create_app(database_path, email, api_key, email_env, domain) :
+def is_any_smtp_in_db(smtp_collection):
+    if len(list(smtp_collection.find( {}))) == 0:
+        return False
+    else:
+        return True
+
+def add_smtp_to_db(smtp_host,smtp_port,smtp_user,smtp_password,smtp_collection):
+    smtp_collection.insert_one({"smtp_host": smtp_host, "smtp_port": smtp_port, "smtp_username": smtp_user, "smtp_password": smtp_password})
+
+def is_any_domain_in_db(domaincollection):
+    if len(list(domaincollection.find( {}))) == 0:
+        return False
+    else:
+        return True
+
+def change_domain(domain, domaincollection):
+    domaincollection.delete_many({})
+    domaincollection.insert_one({"domain": domain})
+
+def add_domain_to_db(domain, domaincollection):
+    domaincollection.insert_one({"domain": domain})
+
+def do_initial_setup_domain_email_api_key_smtp_load_initial_data_in_db(email, smtp_host, smtp_port, smtp_user, smtp_password, domain, api_collection, email_collection, smtp_collection, feed_collection, articlescollection, domaincollection):
+    if not is_any_email_in_db(email_collection):
+        add_email_to_db(email, email_collection)
+    if not is_any_smtp_in_db(smtp_collection):
+        add_smtp_to_db(smtp_host,smtp_port,smtp_user,smtp_password,smtp_collection)
+    if not is_any_domain_in_db(domaincollection):
+        add_domain_to_db(domain, domaincollection)
+    if not is_any_email_in_db(email_collection):
+        add_email_to_db(email, email_collection)
+    if not is_any_smtp_in_db(feed_collection):
+        add_smtp_to_db(smtp_host,smtp_port,smtp_user,smtp_password,smtp_collection)
+
+def command_line_initial_setup_prompting_user_for_data():
+    email = input("Please enter your email address: ")
+    smtp_host = input("Please enter your SMTP host: ")
+    smtp_port = input("Please enter your SMTP port: ")
+    smtp_user = input("Please enter your SMTP username: ")
+    smtp_password = input("Please enter your SMTP password: ")
+    domain = input("Please enter your domain name: ")
+    return email, smtp_host, smtp_port, smtp_user, smtp_password, domain
+
+def is_initial_setup_info_in_env():
+    if os.getenv('EMAIL') is None or os.getenv('SMTP_HOST') is None or os.getenv('SMTP_PORT') is None or os.getenv('SMTP_USER') is None or os.getenv('SMTP_PASSWORD') is None or os.getenv('DOMAIN') is None:
+        return False
+    else:
+        return True
+
+def get_initial_setup_info_from_env():
+    email = os.getenv('EMAIL')
+    smtp_host = os.getenv('SMTP_HOST')
+    smtp_port = os.getenv('SMTP_PORT')
+    smtp_user = os.getenv('SMTP_USER')
+    smtp_password = os.getenv('SMTP_PASSWORD')
+    domain = os.getenv('DOMAIN')
+    return email, smtp_host, smtp_port, smtp_user, smtp_password, domain    
+
+def command_line_initial_setup(app):
+    
+    if not is_initial_setup_info_in_env():
+        email, smtp_host, smtp_port, smtp_user, smtp_password, domain = command_line_initial_setup_prompting_user_for_data()
+    else:
+        email, smtp_host, smtp_port, smtp_user, smtp_password, domain = get_initial_setup_info_from_env()
+    
+    db = app.db
+    api_collection = db.api_keys
+    email_collection = db.email_addresses
+    smtp_collection = db.smtp
+    feed_collection = db.feeds
+    articlescollection = db.articles
+    domaincollection = db.domain
+    do_initial_setup_domain_email_api_key_smtp_load_initial_data_in_db(email, smtp_host, smtp_port, smtp_user, smtp_password, domain, api_collection, email_collection, smtp_collection, feed_collection, articlescollection, domaincollection)
+
+def some_long_task(app):
+    # Get the current Unix time
+    current_time = int(time.time())
+
+    # Check if a file with a similar name already exists
+    for filename in os.listdir('/tmp'):
+        if filename.startswith('check_if_feed_downloadtask_is_loaded_'):
+            file_time = int(filename.split('_')[-1])
+            if abs(current_time - file_time) < 300:
+                print('Task already loaded, skipping...')
+                return
+
+    # Create a file with the current Unix time in the name
+    filename = f'check_if_feed_downloadtask_is_loaded_{current_time}'
+    with open(f'/tmp/{filename}', 'w') as f:
+        f.write('')
+
+    # Run the task
+    while True:
+        send_email_about_new_articles_in_all_feeds(app.feed_collection,app.smtp_collection,app.email_collection,app.articlescollection)
+        print('Ran the task!')
+        # This could be any long running task, just a delay as an example
+        time.sleep(900)
+
+def create_app() :
+
     app = Flask(__name__)
+    app.secret_key = os.urandom(24)
+    database_path = os.getenv('DATABASE_PATH')
     app.dbconnection = MongitaClientDisk(database_path)
     app.db = app.dbconnection['microformats-reader']
     app.api_collection = app.db.api_keys
@@ -350,45 +466,15 @@ def create_app(database_path, email, api_key, email_env, domain) :
     app.feed_collection = app.db.feeds
     app.smtp_collection = app.db.smtp
     app.articlescollection = app.db.articles
-    app.domain = domain
+    app.domaincollection = app.db.domain
 
-    if email:
-        if not check_db_for_email(email, app.email_collection):
-            add_email_to_db(email, app.email_collection)
-    if email_env:
-        if not check_db_for_email(email_env, app.email_collection):
-            add_email_to_db(email_env, app.email_collection)
-    if not is_any_email_in_db(app.email_collection):
-        exit("No email address found in the database. Please add one with the --email flag. An email can also be added with the email_for_microformats_reader environment variable.")      
+    if not initial_setup_check(app):
+        command_line_initial_setup(app)     
     
-    def some_long_task(app):
-        while True:
-            send_email_about_new_articles_in_all_feeds(app.feed_collection,app.smtp_collection,app.email_collection,app.articlescollection)
-            print('Ran the task!')
-            # This could be any long running task, just a delay as an example
-            time.sleep(900)
+    if not is_any_domain_in_db(app.domaincollection):
+        add_domain_to_db("localhost", app.domaincollection)
 
-    def run_continuously(app, interval=1):
-        cease_continuous_run = threading.Event()
-
-        class ScheduleThread(threading.Thread):
-            def __init__(self, app):
-                super().__init__()
-                self.app = app
-
-            def run(self):
-                while not cease_continuous_run.is_set():
-                    some_long_task(self.app)
-                    time.sleep(interval)
-
-        continuous_thread = ScheduleThread(app)
-        continuous_thread.start()
-        return cease_continuous_run
-
-    # This will keep running even after Flask app has started
-    stop_run_continuously = run_continuously(app, interval=900)
-    # This will ensure the task stops if Flask stops
-    atexit.register(stop_run_continuously.set)
+    app.domain = get_domain_from_db(app.domaincollection)
     
     return app
 
@@ -418,29 +504,13 @@ def require_api_key(f):
         return f(*args, **kwargs)
     return decorated_function
 
-    
+def get_db_path_from_env():
+    if os.getenv('DATABASE_PATH') is None:
+        return 'microformats-reader.db'
+    else:
+        return os.getenv('DATABASE_PATH')
 
-parser = argparse.ArgumentParser(description='Start the app with a given database file.')
-parser.add_argument('--database', required=True, help='The path to the database file.')
-parser.add_argument('--domain', required=False, default='http://localhost', help='The path to the domain that the server is at.')
-parser.add_argument('--email', required=False, help='The email address.')
-parser.add_argument('--api_key', required=False, help='The API Key.')
-
-'''
-parser.add_argument('--host', required=False, help='The MongoDB host.')
-parser.add_argument('--port', required=False, help='The MongoDB port.')
-parser.add_argument('--username', required=False, help='The MongoDB username.')
-parser.add_argument('--password', required=False, help='The MongoDB password.')
-parser.add_argument('--database', required=False, help='The MongoDB database name.')
-'''
-
-args = parser.parse_args()
-
-email_env = os.getenv('email_for_microformats_reader')
-
-print(args.database)
-
-app = create_app(args.database, args.email, args.api_key, email_env,args.domain)
+app = create_app()
 
 @app.route('/api/send_magic_link', methods=['POST'])
 def send_magic_link():
@@ -739,5 +809,7 @@ def settings_route():
 def logout_route():
     return render_template('logout.html')
 
-if __name__ == '__main__':
-    app.run()
+
+background_thread = threading.Thread(target=some_long_task, args=(app,))
+background_thread.start()
+serve(app, port=5000,threads=2)

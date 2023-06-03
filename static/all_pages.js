@@ -25,7 +25,7 @@ $(document).ready(function(){
         })
         .fail(function(jqXHR, textStatus, errorThrown){
             if(jqXHR.status === 401){
-                window.location.href = "{{ url_for('login_route') }}";
+                window.location.href = "/login";
             }
         });
     }

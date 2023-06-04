@@ -8,6 +8,7 @@ http://creativecommons.org/publicdomain/zero/1.0/.
 
 from flask import request, jsonify, Flask, current_app, make_response, render_template, redirect, url_for
 from mongita import MongitaClientDisk
+from urllib.parse import urlparse
 import argparse
 import secrets
 import os
@@ -41,6 +42,29 @@ import bleach
 
 
 users_currently_authenticating = {}
+
+def remove_all_georss(url):
+    # Request the raw RSS feed
+    response = requests.get(url)
+
+    # Parse the feed with BeautifulSoup
+    soup = BeautifulSoup(response.content, 'xml')
+
+    # List of GeoRSS elements to remove
+    georss_elements_list = ['georss:point', 'georss:line', 'georss:polygon', 
+                            'georss:box', 'georss:where', 'georss:elev', 
+                            'georss:floor', 'georss:radius']
+
+    for georss_element in georss_elements_list:
+        # Find all elements of this type
+        elements = soup.findAll(georss_element)
+
+        # Remove each element
+        for element in elements:
+            element.decompose()
+
+    # Return the cleaned feed as a string
+    return str(soup)
 
 def destroy_all_articles_in_db(articles_collection):
     articles_collection.delete_many({})
@@ -83,7 +107,11 @@ def get_feed_name(feed_url,feed_collection):
 import bleach
 from bs4 import BeautifulSoup
 
-def clean_html(html):
+def clean_html(html, url):
+    # Extract domain and protocol from URL
+    parsed_url = urlparse(url)
+    domain = parsed_url.scheme + "://" + parsed_url.netloc
+
     # Remove unwanted tags and attributes
     soup = BeautifulSoup(html, 'html.parser')
     for tag in soup(['script', 'style', 'iframe', 'embed', 'object', 'link']):
@@ -91,7 +119,14 @@ def clean_html(html):
     for tag in soup():
         tag.attrs = {key: val for key, val in tag.attrs.items() if key not in ['class', 'id', 'style']}
     for img in soup.find_all('img'):
+        # Check if image path is relative
+        if not img['src'].startswith('http'):
+            img['src'] = domain + img['src']
         img['style'] = 'max-width: 100%;'
+    for a in soup.find_all('a'):
+        # Check if link path is relative
+        if not a['href'].startswith('http'):
+            a['href'] = domain + a['href']
     for video in soup.find_all('video'):
         video.replace_with(soup.new_tag('div', string='[Video removed from content of website]'))
     for audio in soup.find_all('audio'):
@@ -229,7 +264,8 @@ def download_articles_in_rss_feed(feed_url, last_updated_string, feed_data):
     last_updated = datetime.datetime.strptime(last_updated_string, format_string)
     output_feed_articles = []
     try:
-        feed = feedparser.parse(feed_url)
+        cleaned_feed = remove_all_georss(feed_url)
+        feed = feedparser.parse(cleaned_feed)
         print(feed)
     except Exception as e:
         print(f"Error parsing RSS feed: {e}")
@@ -252,8 +288,8 @@ def download_articles_in_rss_feed(feed_url, last_updated_string, feed_data):
                             title = parsed['items'][0]['properties'].get('name', [None])[0]
                             print(title)
                             if title not in [None, '']:
-                                title = clean_html(title)
-                            content = clean_html(parsed['items'][0]['properties'].get('content', [None])[0]["html"])
+                                title = clean_html(title, entry.link)
+                            content = clean_html(parsed['items'][0]['properties'].get('content', [None])[0]["html"], entry.link)
                             print("Printing entry url")
                             print(entry.link)
                             print("Printing title")

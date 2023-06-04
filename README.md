@@ -5,7 +5,7 @@ This is a [social reader](https://indieweb.org/reader) style blog feed reader. I
 It relies on the [microformats](https://indieweb.org/microformats) standard, which is an extension of RSS and HTML. This standard allows better information extraction from blogs that the reader is subscribed to. This allows easy extraction of the full article content, and presentation of the content in a way that closely resembles the feed of a social media application, or conversion of the content into other formats such as email. Microformats are a key part of the [Indieweb project's](https://indieweb.org/) standards. Combined with other Indieweb applications and standards, this tool can be used to make traditional blogs function like what is expected from social media applications -- in effect creating a form of decentralized social media. 
 
 Notable additional features include 
-* A way to assign a priority or probability to a feed. If this is set, the script will randomize if it sends a post to the user. The chance that the post will be sent is set by the user. This functionality exists to avoid an information overload effect. It in effect allows partial subscriptions to a feed -- you will get some of the feeds of the person you are subscribed to 
+* A way to assign a priority or probability to a feed. If this is set, the script will randomize if it sends a post to the user. The chance that the post will be sent is set by the user. This functionality exists to avoid an information overload effect. It in effect allows partial subscriptions to a feed -- you will get some of the posts of the person you are subscribed to 
 
 This application has two ways of presenting the blog posts it is subscribed to
 * Sending emails containing the content of the blog posts 

@@ -1,0 +1,70 @@
+{# Written in 2023 by Theodore Jones tjones2@fastmail.com #}
+{# To the extent possible under law, the author(s) have dedicated all copyright #}
+{# and related and neighboring rights to this software to the public domain worldwide. #}
+{# This software is distributed without any warranty. #}
+{# http://creativecommons.org/publicdomain/zero/1.0/. #}
+
+
+{% extends "base.html" %}
+{% block title %}Infinite Scroll{% endblock %}
+
+{% block content %}
+    <div id="posts">
+
+    </div>
+
+    <!-- Loader -->
+    <div id="loading">
+        <div class="loader"></div>
+    </div>
+
+    <script>
+        var start = 0;
+        var limit = 10;
+    
+        function fetchPosts() {
+            // Show loader before fetching posts
+            $("#loading").show();
+    
+            $.ajax({
+                url: '/api/get_posts_bt_start_and_limit',
+                data: {
+                    'start': start,
+                    'limit': limit
+                },
+                dataType: 'json',
+                success: function(data) {
+                    for (var i = 0; i < data.length; i++) {
+                        var post_html = '<div class="post">';
+                        if (data[i].title) {
+                            post_html += '<h2><a href="' + data[i].url + '">' + data[i].title + '</a></h2>';
+                        }
+                        post_html += data[i].content;
+                        post_html += '<p><a href="' + data[i].url + '">View Original Post</a></p>';
+                        post_html += '</div>';
+                        $('#posts').append(post_html);
+                    }
+                    start += limit;
+                },
+                error: function() {
+                    console.log("Error getting posts.")
+                },
+                complete: function() {
+                    // Hide loader after fetching posts
+                    $("#loading").hide();
+                }
+            });
+        }
+    
+        $(window).scroll(function() {
+            if ($(window).scrollTop() == $(document).height() - $(window).height()) {
+                fetchPosts();
+            }
+        });
+    
+        $(document).ready(fetchPosts);
+    </script>
+    
+    
+    
+{% endblock %}

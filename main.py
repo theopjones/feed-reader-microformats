@@ -36,6 +36,9 @@ import random
 
 from waitress import serve
 
+from html_sanitizer import Sanitizer
+import bleach
+
 
 users_currently_authenticating = {}
 
@@ -70,36 +73,40 @@ def get_feed_name(feed_url,feed_collection):
     feed_name = feed_output[0].pop('name')
     return feed_name
 
+
+import bleach
+from bs4 import BeautifulSoup
+
 def clean_html(html):
+    # Remove unwanted tags and attributes
     soup = BeautifulSoup(html, 'html.parser')
-     # Handle YouTube videos
-    for iframe in soup.find_all('iframe'):
-        if 'youtube.com' in iframe['src']:
-            video_id = iframe['src'].split('/')[-1]
-            iframe.replace_with(soup.new_tag('div', string=f'[YouTube video removed from content of website. Video ID: {video_id}]'))
-    # Replace video tags with note
-    for video in soup.find_all('video'):
-        video.replace_with(soup.new_tag('div', string='[Video removed from content of website]'))
-    # Replace audio tags with note
-    for audio in soup.find_all('audio'):
-        audio.replace_with(soup.new_tag('div', string='[Audio removed from content of website]'))
-    # Replace SVG graphics with note
-    for svg in soup.find_all('svg'):
-        svg.replace_with(soup.new_tag('div', string='[SVG graphic removed from content of website]'))
-    # Replace form elements with note
-    for form in soup.find_all('form'):
-        form.replace_with(soup.new_tag('div', string='[Form removed from content of website]'))
-    # Remove unwanted tags
     for tag in soup(['script', 'style', 'iframe', 'embed', 'object', 'link']):
         tag.decompose()
-    # Remove unwanted attributes
     for tag in soup():
         tag.attrs = {key: val for key, val in tag.attrs.items() if key not in ['class', 'id', 'style']}
-    # Limit image size
     for img in soup.find_all('img'):
         img['style'] = 'max-width: 100%;'
-    return str(soup)
+    for video in soup.find_all('video'):
+        video.replace_with(soup.new_tag('div', string='[Video removed from content of website]'))
+    for audio in soup.find_all('audio'):
+        audio.replace_with(soup.new_tag('div', string='[Audio removed from content of website]'))
+    for svg in soup.find_all('svg'):
+        svg.replace_with(soup.new_tag('div', string='[SVG graphic removed from content of website]'))
+    for form in soup.find_all('form'):
+        form.replace_with(soup.new_tag('div', string='[Form removed from content of website]'))
+    cleaned_html = str(soup)
 
+    # Sanitize HTML using Bleach
+    tags = ['img', 'p', 'br', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div']
+    attributes = {
+        '*': ['class', 'id', 'style'],
+        'img': ['src', 'alt', 'title', 'width', 'height'],
+        'a': ['href', 'title'],
+        'div': ['align']
+    }
+    cleaned_html = bleach.clean(cleaned_html, tags=tags, attributes=attributes, strip=True)
+
+    return cleaned_html
 
 def send_email_about_new_articles_in_feed(feed, feed_collection, smtp_collection, email_collection, articles_collection):
     feed_data = feed_collection.find_one({'feed': feed})
@@ -117,7 +124,8 @@ def send_email_about_new_articles_in_feed(feed, feed_collection, smtp_collection
                         'content': article['content'],
                         'url': article['url'],
                         'feed_name': get_feed_name(feed, feed_collection),
-                        'date_added': datetime.datetime.utcnow()
+                        'date_added': datetime.datetime.utcnow(),
+                        'posted_date': article['published_time'],
                     })
                     article_url = article['url']
 
@@ -189,26 +197,35 @@ def get_current_time():
     now = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
     return now
 
-def download_articles_in_rss_feed(feed_url,last_updated_string,feed_data):
+def download_articles_in_rss_feed(feed_url, last_updated_string, feed_data):
     format_string = '%Y-%m-%d %H:%M:%S'
     last_updated = datetime.datetime.strptime(last_updated_string, format_string)
     output_feed_articles = []
-    feed = feedparser.parse(feed_url)
+    try:
+        feed = feedparser.parse(feed_url)
+    except Exception as e:
+        print(f"Error parsing RSS feed: {e}")
+        return output_feed_articles
     for entry in feed.entries:
-        probability = float(feed_data.get('probability'))
-        if probability is None or random.random() <= probability:
-            published_time = datetime.datetime(*entry.published_parsed[:6])
-            if last_updated is None or published_time > last_updated:
-              response = requests.get(entry.link)
-              if response.ok:
-                    # Check if the page contains microformats
-                   parsed = mf2py.parse(doc=response.text, url=response.url)
-                   if parsed['items']:
-                       # Extract the title and content of the item
-                      title = parsed['items'][0]['properties'].get('name', [None])[0]
-                      content = parsed['items'][0]['properties'].get('content', [None])[0]["html"]
-                      output_feed_articles.append({"title": title, "content": content, 'published_time': published_time, 'url': entry.link})
-    return output_feed_articles            
+        try:
+            probability = float(feed_data.get('probability'))
+            if probability is None or random.random() <= probability:
+                published_time = datetime.datetime(*entry.published_parsed[:6])
+                if last_updated is None or published_time > last_updated:
+                    response = requests.get(entry.link)
+                    if response.ok:
+                        # Check if the page contains microformats
+                        parsed = mf2py.parse(doc=response.text, url=response.url)
+                        if parsed['items']:
+                            # Extract the title and content of the item
+                            title = parsed['items'][0]['properties'].get('name', [None])[0]
+                            if title not in [None, '']:
+                                title = clean_html(title)
+                            content = clean_html(parsed['items'][0]['properties'].get('content', [None])[0]["html"])
+                            output_feed_articles.append({"title": title, "content": content, 'published_time': int(published_time.timestamp()), 'url': entry.link})
+        except Exception as e:
+            print(f"Error processing RSS feed entry: {e}")
+    return output_feed_articles        
 
 
 def get_rss_feed_url(url):
@@ -429,6 +446,21 @@ def command_line_initial_setup(app):
     articlescollection = db.articles
     domaincollection = db.domain
     do_initial_setup_domain_email_api_key_smtp_load_initial_data_in_db(email, smtp_host, smtp_port, smtp_user, smtp_password, domain, api_collection, email_collection, smtp_collection, feed_collection, articlescollection, domaincollection)
+
+def get_some_posts_based_on_starting_post_and_numb_of_posts(articles_collection, starting_post, numb_of_posts):
+    posts = []
+    # Search database for posts based on starting post and numb of posts
+    # Query DB for posts based on post date. Sort by post date descending
+    # Use articles collection, not feed collection, 'posted_date' contains the time
+    # the post was made. startin_post is the number of posts to skip, numb_of_posts is the number of posts to return
+
+    # Get the numb_of_posts posts starting from the starting_post
+    for post in articles_collection.find().sort('posted_date', -1).skip(starting_post).limit(numb_of_posts):
+        # Convert ObjectId to string
+        post['_id'] = str(post['_id'])
+        posts.append(post)
+
+    return posts
 
 def some_long_task(app):
     # Get the current Unix time
@@ -787,6 +819,14 @@ def update_feed_probability_route():
     else:
         return jsonify({'error': 'No feed URL or probability provided.'}), 400
 
+@app.route('/api/get_posts_bt_start_and_limit', methods=['GET'])
+@require_api_key
+def get_posts_bt_start_and_limit_route():
+    # Wrapper arround get_some_posts_based_on_starting_post_and_numb_of_posts(articles_collection, starting_post, numb_of_posts)
+    start = int(request.args.get('start'))
+    limit = int(request.args.get('limit'))
+    posts = get_some_posts_based_on_starting_post_and_numb_of_posts(app.articlescollection, start, limit)
+    return jsonify(posts), 200
 #FRONTEND ROUTES
 
 @app.route('/')
@@ -808,6 +848,10 @@ def settings_route():
 @app.route('/logout', methods=['GET'])
 def logout_route():
     return render_template('logout.html')
+
+@app.route('/scroll', methods=['GET'])
+def scroll_route():
+    return render_template('scroll.html')
 
 
 background_thread = threading.Thread(target=some_long_task, args=(app,))

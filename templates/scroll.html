@@ -36,11 +36,11 @@
                 success: function(data) {
                     for (var i = 0; i < data.length; i++) {
                         var post_html = '<div class="post">';
+                        post_html += '<p><a href="' + data[i].url + '">' + data[i].url +'</a></p> <br>';
                         if (data[i].title) {
                             post_html += '<h2><a href="' + data[i].url + '">' + data[i].title + '</a></h2>';
                         }
                         post_html += data[i].content;
-                        post_html += '<p><a href="' + data[i].url + '">View Original Post</a></p>';
                         post_html += '</div>';
                         $('#posts').append(post_html);
                     }

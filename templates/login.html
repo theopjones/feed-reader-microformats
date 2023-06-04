@@ -6,19 +6,26 @@ Login
 
 {% block content %}
     <form id="login-form">
-        <input type="email" id="email" placeholder="Your Email">
-        <button type="submit">Send Magic Link</button>
+        <input type="text" id="username" placeholder="Username">
+        <input type="password" id="password" placeholder="Password">
+        <button type="submit">Login</button>
     </form>
 
     <script>
         document.getElementById('login-form').addEventListener('submit', function(event) {
             event.preventDefault();
-            var email = document.getElementById('email').value;
+            var username = document.getElementById('username').value;
+            var password = document.getElementById('password').value;
             
-            // Send magic link to the provided email
-            $.post("/api/send_magic_link", { email: email })
+            // Send username and password to the server for authentication
+            $.post("/api/login", { username: username, password: password })
                 .done(function(data) {
-                    alert("Magic link sent! Check your email.");
+                    alert("Authenticated successfully!");
+                    // Redirect to the home page
+                    window.location.href = "/";
+                })
+                .fail(function(jqXHR, textStatus, errorThrown) {
+                    alert("Authentication failed: " + jqXHR.responseJSON.error);
                 });
         });
     </script>

@@ -48,6 +48,8 @@ def destroy_all_articles_in_db(articles_collection):
 
 def send_email_about_new_articles_in_all_feeds(feed_collection, smtp_collection, email_collection,articles_collection):
     feeds = get_all_feeds(feed_collection)
+    print("Feeds")
+    print(feeds)
     with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
         futures = [executor.submit(send_email_about_new_articles_in_feed, feed, feed_collection, smtp_collection, email_collection,articles_collection) for feed in feeds]
         for future in concurrent.futures.as_completed(futures):
@@ -58,8 +60,12 @@ def send_email_about_new_articles_in_all_feeds(feed_collection, smtp_collection,
 
 def get_all_feeds(feed_collection):
     feed_output = list(feed_collection.find( {}))
+    print("Feed Output")
+    print(feed_output)
     feeds = []
     for feed in feed_output:
+        print("Feed")
+        print(feed)
         feeds.append(feed.pop('feed'))
     return feeds
 
@@ -110,11 +116,20 @@ def clean_html(html):
 
 def send_email_about_new_articles_in_feed(feed, feed_collection, smtp_collection, email_collection, articles_collection):
     feed_data = feed_collection.find_one({'feed': feed})
+    print("Feed Data")
+    print(feed_data)
     if feed_data:
-        articles = download_articles_in_feed_and_update_last_updated(feed, feed_collection)
+        try:
+            articles = download_articles_in_feed_and_update_last_updated(feed, feed_collection)
+        except Exception as e:
+            print(f"Error downloading articles for feed {feed}: {e}")
+            return
+        print("Articles")
+        print(articles)
         articles.reverse()
         if len(articles) > 0:
-                for article in articles:
+            for article in articles:
+                try:
                     # Generate unique identifier for article
                     article_id = str(uuid.uuid4())
                     # Add article to database
@@ -131,16 +146,19 @@ def send_email_about_new_articles_in_feed(feed, feed_collection, smtp_collection
 
                     # Add link to raw HTML page to email body
                     raw_html_link = f'/article_raw_html?id={article_id}'
-                    email_body = clean_html(article['content'] + f'<br><a href="{article_url}">View original post</a>' + f'<br>View raw HTML by going to {raw_html_link} on the server of your reader application.')
+                    # email_body = clean_html(article['content'] + f'<br><a href="{article_url}">View original post</a>' + f'<br>View raw HTML by going to {raw_html_link} on the server of your reader application.')
                     # Send email
-                    email = get_all_emails(email_collection)[0]
-                    subject = f"New Article from {get_feed_name(feed, feed_collection)}"
-                    if article['title']:
-                        subject += f": {article['title']}"
-                    send_email(email, subject, email_body, get_feed_name(feed,feed_collection) , smtp_collection, email_collection)
+                    # email = get_all_emails(email_collection)[0]
+                    # subject = f"New Article from {get_feed_name(feed, feed_collection)}"
+                    # if article['title']:
+                        # subject += f": {article['title']}"
+                    # send_email(email, subject, email_body, get_feed_name(feed,feed_collection) , smtp_collection, email_collection)
+                except Exception as e:
+                    print(f"Error processing article {article['url']}: {e}")
+    else:
+        print(f"No data found for feed {feed}")
 
 def send_email(email, subject, body, name, smtp_collection, email_collection):
-    print( "Sending email to " + email + " with subject " + subject + " and body " + body)
     smtp_host, smtp_port, smtp_username, smtp_password = get_smtp_data(smtp_collection)
     server = smtplib.SMTP(smtp_host, smtp_port)
     server.starttls()
@@ -181,6 +199,11 @@ def download_articles_in_feed_and_update_last_updated(feed,feed_collection):
     articles = download_articles_in_rss_feed(feed,last_updated,feed_data)
     update_feed_last_updated(feed,feed_collection)
     return articles
+
+def get_common_name_of_feed(feed,feed_collection):
+    feed_output = list(feed_collection.find( {"feed" : feed} ))
+    common_name = feed_output[0].pop('name')
+    return common_name
 
 def get_feed_last_updated(feed,feed_collection):
     feed_output = list(feed_collection.find( {"feed" : feed} ))
@@ -544,42 +567,28 @@ def get_db_path_from_env():
 
 app = create_app()
 
-@app.route('/api/send_magic_link', methods=['POST'])
-def send_magic_link():
-    email = request.form.get('email')
-    if not email:
-        return jsonify({'error': 'Email is required.'}), 400
+@app.route('/api/login', methods=['POST'])
+def login():
+    username = request.form.get('username')
+    password = request.form.get('password')
+    if not username or not password:
+        return jsonify({'error': 'Username and password are required.'}), 400
 
-    if is_email_in_emails_list(email,app.email_collection):
-        token = secrets.token_hex(32)
-        users_currently_authenticating[token] = email
-        domainname = app.domain
-        msg = 'Your Magic Link \n Click this link to login: ' + domainname + ':5000/api/authenticate?token=' + token
-    
-        send_email(email, "Magic Link", msg, "Login", app.smtp_collection, app.email_collection)
-    else: 
-        print("Email not found in database." + email)
-    return jsonify({'message': 'Magic link sent.'}), 200
+    if username == os.environ.get('APP_USERNAME') and password == os.environ.get('APP_PASSWORD'):
+        # Create a unique user ID for the new user
+        user_id = uuid.uuid4().hex
 
-@app.route('/api/authenticate', methods=['GET'])
-def authenticate():
-    token = request.args.get('token')
-    if not token or token not in users_currently_authenticating:
-        return jsonify({'error': 'Invalid token.'}), 400
-
-    # Create a unique user ID for the new user
-    user_id = uuid.uuid4().hex
-
-    api_key = generate_and_add_api_key_to_db(user_id, app.api_collection)
-    del users_currently_authenticating[token]
-    
-    response = make_response(jsonify({'message': 'Authenticated successfully.', 'api_key': api_key}), 200)
-    
-    # Set the user_id and api_key as cookies
-    response.set_cookie('user_id', user_id, httponly=True)
-    response.set_cookie('api_key', api_key, httponly=True)
-    
-    return response
+        api_key = generate_and_add_api_key_to_db(user_id, app.api_collection)
+        
+        response = make_response(jsonify({'message': 'Authenticated successfully.', 'api_key': api_key}), 200)
+        
+        # Set the user_id and api_key as cookies
+        response.set_cookie('user_id', user_id, httponly=True)
+        response.set_cookie('api_key', api_key, httponly=True)
+        
+        return response
+    else:
+        return jsonify({'error': 'Invalid username or password.'}), 401
 
 
 @app.route('/api/hello', methods=['GET'])

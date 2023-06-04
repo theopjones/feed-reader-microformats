@@ -7,3 +7,4 @@ beautifulsoup4
 uwsgi
 waitress
 bleach
+html_sanitizer

@@ -120,7 +120,9 @@ def send_email_about_new_articles_in_feed(feed, feed_collection, smtp_collection
     print(feed_data)
     if feed_data:
         try:
+            print("Downloading Articles In Feed")
             articles = download_articles_in_feed_and_update_last_updated(feed, feed_collection)
+            print("Downloaded Articles In Feed")
         except Exception as e:
             print(f"Error downloading articles for feed {feed}: {e}")
             return
@@ -197,7 +199,9 @@ def download_articles_in_feed_and_update_last_updated(feed,feed_collection):
     feed_data = feed_collection.find_one({'feed': feed})
     last_updated = get_feed_last_updated(feed,feed_collection)
     articles = download_articles_in_rss_feed(feed,last_updated,feed_data)
+    print("Downloaded Articles")
     update_feed_last_updated(feed,feed_collection)
+    print("Updated Feed Last Updated")
     return articles
 
 def get_common_name_of_feed(feed,feed_collection):
@@ -226,6 +230,7 @@ def download_articles_in_rss_feed(feed_url, last_updated_string, feed_data):
     output_feed_articles = []
     try:
         feed = feedparser.parse(feed_url)
+        print(feed)
     except Exception as e:
         print(f"Error parsing RSS feed: {e}")
         return output_feed_articles
@@ -238,13 +243,23 @@ def download_articles_in_rss_feed(feed_url, last_updated_string, feed_data):
                     response = requests.get(entry.link)
                     if response.ok:
                         # Check if the page contains microformats
+                        print(entry.link)
                         parsed = mf2py.parse(doc=response.text, url=response.url)
                         if parsed['items']:
+                            print("could_find_microformats")
                             # Extract the title and content of the item
+                            print("outputting title")
                             title = parsed['items'][0]['properties'].get('name', [None])[0]
+                            print(title)
                             if title not in [None, '']:
                                 title = clean_html(title)
                             content = clean_html(parsed['items'][0]['properties'].get('content', [None])[0]["html"])
+                            print("Printing entry url")
+                            print(entry.link)
+                            print("Printing title")
+                            print(title)
+                            print("Printing content")
+                            print(content)
                             output_feed_articles.append({"title": title, "content": content, 'published_time': int(published_time.timestamp()), 'url': entry.link})
         except Exception as e:
             print(f"Error processing RSS feed entry: {e}")
@@ -724,7 +739,8 @@ def change_feed_last_updated_route():
 def download_articles_in_feed_and_update_last_updated_route():
     url = request.form.get('feedurl')
     if url:
-        return jsonify(download_articles_in_feed_and_update_last_updated(url, app.feed_collection)), 200
+        send_email_about_new_articles_in_feed(url, app.feed_collection, app.smtp_collection, app.email_collection, app.articlescollection)
+        return jsonify("success"), 200
     else:
         return jsonify({'error': 'No URL provided.'}), 400
 

@@ -343,7 +343,7 @@ def some_long_task(app):
 
     # Run the task
     while True:
-        process_feeds = feeds.FeedProcessor(app.feed_collection, app.smtp_collection, app.email_collection, app.articles_collection)
+        process_feeds = feeds.FeedProcessor(app.feed_collection, app.smtp_collection, app.email_collection, app.articlescollection)
         process_feeds.process_all_feeds_and_send_email()
         print('Ran the task!')
         # This could be any long running task, just a delay as an example
@@ -462,8 +462,8 @@ def remove_email_route():
 
 @app.route('/api/feeds', methods=['GET'])
 @require_api_key
-def feeds():
-    feeds_object = feeds.FeedProcessor(app.feed_collection, app.smtp_collection, app.email_collection, app.articles_collection)
+def feeds_route():
+    feeds_object = feeds.FeedProcessor(app.feed_collection, app.smtp_collection, app.email_collection, app.articlescollection)
     return jsonify(feeds_object.list_feeds()), 200
 
 @app.route('/api/add_feed', methods=['POST'])
@@ -538,7 +538,7 @@ def get_current_time_route():
 @app.route('/api/list_feeds_with_last_updated', methods=['GET'])
 @require_api_key
 def list_feeds_with_last_updated_route():
-    feeds_object = feeds.FeedProcessor(app.feed_collection, app.smtp_collection, app.email_collection, app.articles_collection)
+    feeds_object = feeds.FeedProcessor(app.feed_collection, app.smtp_collection, app.email_collection, app.articlescollection)
     return jsonify(feeds_object.list_feeds_with_last_updated()), 200
 
 @app.route('/api/get_feed_last_updated', methods=['POST'])
@@ -566,7 +566,8 @@ def change_feed_last_updated_route():
 def download_articles_in_feed_and_update_last_updated_route():
     url = request.form.get('feedurl')
     if url:
-        feeds.send_email_about_new_articles_in_feed(url, app.feed_collection, app.smtp_collection, app.email_collection, app.articlescollection)
+        feed_processor = feeds.FeedProcessor(app.feed_collection, app.smtp_collection, app.email_collection, app.articlescollection)
+        feed_processor.process_feed_and_send_email(url)
         return jsonify("success"), 200
     else:
         return jsonify({'error': 'No URL provided.'}), 400
@@ -618,8 +619,9 @@ def get_smtp_data_route():
 @app.route('/api/send_email_about_new_articles_in_all_feeds', methods=['GET'])
 @require_api_key
 def send_email_about_new_articles_in_all_feeds_route():
-    feeds.send_email_about_new_articles_in_all_feeds(app.feed_collection,app.smtp_collection,app.email_collection,app.articlescollection)
-    return jsonify({'message': 'Email sent.'}), 200
+    feed_processor = feeds.FeedProcessor(app.feed_collection, app.smtp_collection, app.email_collection, app.articlescollection)
+    feed_processor.process_all_feeds_and_send_email()
+    return jsonify({'message': 'Feeds Updated.'}), 200
 
 @app.route('/api/has_valid_api_key', methods=['GET'])
 @require_api_key

@@ -1,0 +1,18 @@
+version: '3'
+
+services:
+  microformatsfeedreader:
+    image: microformats-email-reader
+    command: python main.py
+    ports:
+      - "5000:5000"
+    environment:
+      - EMAIL=username@example.com
+      - SMTP_HOST=example.com
+      - SMTP_PORT=587
+      - SMTP_USER=username@example.com
+      - SMTP_PASSWORD=very_strong_password
+      - APP_USERNAME=your_username
+      - APP_PASSWORD=your_password
+      - DOMAIN=example.com
+    restart: unless-stopped

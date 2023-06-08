@@ -62,14 +62,17 @@ class FeedProcessor:
 
     def add_article_to_database(self, article, feed_url):
         article_id = str(uuid.uuid4())
+        title = article.get('title', '')
+        content = article.get('content', '')
+        posted_time = article.get('published_time', datetime.datetime.utcnow())
         self.articles_collection.insert_one({
             'id': article_id,
-            'title': article['title'],
-            'content': article['content'],
+            'title': title,
+            'content': content,
             'url': article['url'],
             'feed_name': feed_url,
             'date_added': datetime.datetime.utcnow(),
-            'posted_date': article['published_time'],
+            'posted_date': posted_time,
         })
         return article_id
 

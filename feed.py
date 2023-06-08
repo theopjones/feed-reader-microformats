@@ -20,6 +20,7 @@ import datetime
 import datetime
 import feedparser
 import html_processing
+import random
 
 class Feed:
     def __init__(self, feed_url, feed_collection):
@@ -38,6 +39,7 @@ class Feed:
         try:
             cleaned_feed = html_processing.remove_all_georss(self.feed_url)
             feed = feedparser.parse(cleaned_feed)
+            print(feed)
         except Exception as e:
             print(f"Error parsing RSS feed: {e}")
             return []

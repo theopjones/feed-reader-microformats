@@ -14,6 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 '''
 
+from urllib.parse import urlparse
+import requests
+from bs4 import BeautifulSoup
+import bleach
+
+
 def remove_all_georss(url):
     # Request the raw RSS feed
     response = requests.get(url)

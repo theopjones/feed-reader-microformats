@@ -35,8 +35,8 @@ class Article:
             parsed = self.get_microformats(response)
             if parsed:
                 title, content = self.extract_title_and_content(parsed, self.entry.link)
-                if title:
-                    return {"title": title, "content": content, 'published_time': self.get_published_time(), 'url': self.entry.link}
+                if title or content:
+                    return {"title": title or "", "content": content or "", 'published_time': self.get_published_time(), 'url': self.entry.link}
         return None
 
     def get_published_time(self):

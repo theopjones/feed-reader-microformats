@@ -1,9 +1,17 @@
 '''
-Written in 2023 by Theodore Jones tjones2@fastmail.com 
-To the extent possible under law, the author(s) have dedicated all copyright 
-and related and neighboring rights to this software to the public domain worldwide. 
-This software is distributed without any warranty. 
-http://creativecommons.org/publicdomain/zero/1.0/.
+Copyright 2023 by Theodore Jones tjones2@fastmail.com 
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 '''
 
 from flask import request, jsonify, Flask, current_app, make_response, render_template, redirect, url_for
@@ -26,7 +34,6 @@ from bs4 import BeautifulSoup
 
 import smtplib
 
-import concurrent.futures
 import atexit
 import threading
 
@@ -40,160 +47,20 @@ from waitress import serve
 from html_sanitizer import Sanitizer
 import bleach
 
+import feeds
 
 users_currently_authenticating = {}
 
-def remove_all_georss(url):
-    # Request the raw RSS feed
-    response = requests.get(url)
-
-    # Parse the feed with BeautifulSoup
-    soup = BeautifulSoup(response.content, 'xml')
-
-    # List of GeoRSS elements to remove
-    georss_elements_list = ['georss:point', 'georss:line', 'georss:polygon', 
-                            'georss:box', 'georss:where', 'georss:elev', 
-                            'georss:floor', 'georss:radius']
-
-    for georss_element in georss_elements_list:
-        # Find all elements of this type
-        elements = soup.findAll(georss_element)
-
-        # Remove each element
-        for element in elements:
-            element.decompose()
-
-    # Return the cleaned feed as a string
-    return str(soup)
-
 def destroy_all_articles_in_db(articles_collection):
     articles_collection.delete_many({})
-
-
-def send_email_about_new_articles_in_all_feeds(feed_collection, smtp_collection, email_collection,articles_collection):
-    feeds = get_all_feeds(feed_collection)
-    print("Feeds")
-    print(feeds)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
-        futures = [executor.submit(send_email_about_new_articles_in_feed, feed, feed_collection, smtp_collection, email_collection,articles_collection) for feed in feeds]
-        for future in concurrent.futures.as_completed(futures):
-            try:
-                future.result()
-            except Exception as e:
-                print(f'Error: {e}')
-
-def get_all_feeds(feed_collection):
-    feed_output = list(feed_collection.find( {}))
-    print("Feed Output")
-    print(feed_output)
-    feeds = []
-    for feed in feed_output:
-        print("Feed")
-        print(feed)
-        feeds.append(feed.pop('feed'))
-    return feeds
 
 def get_first_email(email_collection):
     email_output = list(email_collection.find( {}))
     email = email_output[0].pop('email')
     return email
 
-def get_feed_name(feed_url,feed_collection):
-    feed_output = list(feed_collection.find( {"feed" : feed_url} ))
-    feed_name = feed_output[0].pop('name')
-    return feed_name
-
-
 import bleach
 from bs4 import BeautifulSoup
-
-def clean_html(html, url):
-    # Extract domain and protocol from URL
-    parsed_url = urlparse(url)
-    domain = parsed_url.scheme + "://" + parsed_url.netloc
-
-    # Remove unwanted tags and attributes
-    soup = BeautifulSoup(html, 'html.parser')
-    for tag in soup(['script', 'style', 'iframe', 'embed', 'object', 'link']):
-        tag.decompose()
-    for tag in soup():
-        tag.attrs = {key: val for key, val in tag.attrs.items() if key not in ['class', 'id', 'style']}
-    for img in soup.find_all('img'):
-        # Check if image path is relative
-        if not img['src'].startswith('http'):
-            img['src'] = domain + img['src']
-        img['style'] = 'max-width: 100%;'
-    for a in soup.find_all('a'):
-        # Check if link path is relative
-        if not a['href'].startswith('http'):
-            a['href'] = domain + a['href']
-    for video in soup.find_all('video'):
-        video.replace_with(soup.new_tag('div', string='[Video removed from content of website]'))
-    for audio in soup.find_all('audio'):
-        audio.replace_with(soup.new_tag('div', string='[Audio removed from content of website]'))
-    for svg in soup.find_all('svg'):
-        svg.replace_with(soup.new_tag('div', string='[SVG graphic removed from content of website]'))
-    for form in soup.find_all('form'):
-        form.replace_with(soup.new_tag('div', string='[Form removed from content of website]'))
-    cleaned_html = str(soup)
-
-    # Sanitize HTML using Bleach
-    tags = ['img', 'p', 'br', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div']
-    attributes = {
-        '*': ['class', 'id', 'style'],
-        'img': ['src', 'alt', 'title', 'width', 'height'],
-        'a': ['href', 'title'],
-        'div': ['align']
-    }
-    cleaned_html = bleach.clean(cleaned_html, tags=tags, attributes=attributes, strip=True)
-
-    return cleaned_html
-
-def send_email_about_new_articles_in_feed(feed, feed_collection, smtp_collection, email_collection, articles_collection):
-    feed_data = feed_collection.find_one({'feed': feed})
-    print("Feed Data")
-    print(feed_data)
-    if feed_data:
-        try:
-            print("Downloading Articles In Feed")
-            articles = download_articles_in_feed_and_update_last_updated(feed, feed_collection)
-            print("Downloaded Articles In Feed")
-        except Exception as e:
-            print(f"Error downloading articles for feed {feed}: {e}")
-            return
-        print("Articles")
-        print(articles)
-        articles.reverse()
-        if len(articles) > 0:
-            for article in articles:
-                try:
-                    # Generate unique identifier for article
-                    article_id = str(uuid.uuid4())
-                    # Add article to database
-                    articles_collection.insert_one({
-                        'id': article_id,
-                        'title': article['title'],
-                        'content': article['content'],
-                        'url': article['url'],
-                        'feed_name': get_feed_name(feed, feed_collection),
-                        'date_added': datetime.datetime.utcnow(),
-                        'posted_date': article['published_time'],
-                    })
-                    article_url = article['url']
-
-                    # Add link to raw HTML page to email body
-                    raw_html_link = f'/article_raw_html?id={article_id}'
-                    # email_body = clean_html(article['content'] + f'<br><a href="{article_url}">View original post</a>' + f'<br>View raw HTML by going to {raw_html_link} on the server of your reader application.')
-                    # Send email
-                    # email = get_all_emails(email_collection)[0]
-                    # subject = f"New Article from {get_feed_name(feed, feed_collection)}"
-                    # if article['title']:
-                        # subject += f": {article['title']}"
-                    # send_email(email, subject, email_body, get_feed_name(feed,feed_collection) , smtp_collection, email_collection)
-                except Exception as e:
-                    print(f"Error processing article {article['url']}: {e}")
-    else:
-        print(f"No data found for feed {feed}")
 
 def send_email(email, subject, body, name, smtp_collection, email_collection):
     smtp_host, smtp_port, smtp_username, smtp_password = get_smtp_data(smtp_collection)
@@ -230,27 +97,10 @@ def change_feed_last_updated(feed,feed_collection,new_date):
     feed_collection.update_one({"feed": feed}, {"$set": {"last_updated": new_date}})
     return True
 
-def download_articles_in_feed_and_update_last_updated(feed,feed_collection):
-    feed_data = feed_collection.find_one({'feed': feed})
-    last_updated = get_feed_last_updated(feed,feed_collection)
-    articles = download_articles_in_rss_feed(feed,last_updated,feed_data)
-    print("Downloaded Articles")
-    update_feed_last_updated(feed,feed_collection)
-    print("Updated Feed Last Updated")
-    return articles
-
 def get_common_name_of_feed(feed,feed_collection):
     feed_output = list(feed_collection.find( {"feed" : feed} ))
     common_name = feed_output[0].pop('name')
     return common_name
-
-def get_feed_last_updated(feed,feed_collection):
-    feed_output = list(feed_collection.find( {"feed" : feed} ))
-    last_updated = feed_output[0].pop('last_updated')
-    return last_updated
-
-def update_feed_last_updated(feed,feed_collection):
-    feed_collection.update_one({"feed": feed}, {"$set": {"last_updated": get_current_time()}})
 
 def update_feed_probability(feed, feed_collection, probability):
     feed_collection.update_one({"feed": feed}, {"$set": {"probability": probability}})
@@ -258,48 +108,6 @@ def update_feed_probability(feed, feed_collection, probability):
 def get_current_time():
     now = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
     return now
-
-def download_articles_in_rss_feed(feed_url, last_updated_string, feed_data):
-    format_string = '%Y-%m-%d %H:%M:%S'
-    last_updated = datetime.datetime.strptime(last_updated_string, format_string)
-    output_feed_articles = []
-    try:
-        cleaned_feed = remove_all_georss(feed_url)
-        feed = feedparser.parse(cleaned_feed)
-        print(feed)
-    except Exception as e:
-        print(f"Error parsing RSS feed: {e}")
-        return output_feed_articles
-    for entry in feed.entries:
-        try:
-            probability = float(feed_data.get('probability'))
-            if probability is None or random.random() <= probability:
-                published_time = datetime.datetime(*entry.published_parsed[:6])
-                if last_updated is None or published_time > last_updated:
-                    response = requests.get(entry.link)
-                    if response.ok:
-                        # Check if the page contains microformats
-                        print(entry.link)
-                        parsed = mf2py.parse(doc=response.text, url=response.url)
-                        if parsed['items']:
-                            print("could_find_microformats")
-                            # Extract the title and content of the item
-                            print("outputting title")
-                            title = parsed['items'][0]['properties'].get('name', [None])[0]
-                            print(title)
-                            if title not in [None, '']:
-                                title = clean_html(title, entry.link)
-                            content = clean_html(parsed['items'][0]['properties'].get('content', [None])[0]["html"], entry.link)
-                            print("Printing entry url")
-                            print(entry.link)
-                            print("Printing title")
-                            print(title)
-                            print("Printing content")
-                            print(content)
-                            output_feed_articles.append({"title": title, "content": content, 'published_time': int(published_time.timestamp()), 'url': entry.link})
-        except Exception as e:
-            print(f"Error processing RSS feed entry: {e}")
-    return output_feed_articles        
 
 
 def get_rss_feed_url(url):
@@ -341,26 +149,6 @@ def remove_feed(feed,feed_collection):
 def add_feed(feed, name, feed_collection, probability=None):
     feeddata = {"feed": feed, "last_updated": "1970-01-25 20:46:58", "name": name, "probability": probability}
     feed_collection.insert_one(feeddata)
-
-
-def list_feeds_with_last_updated(feed_collection):
-    feeds_output = list(feed_collection.find({}))
-    feeds = []
-    for feedfromdb in feeds_output:
-        feed = [feedfromdb.pop('feed'), feedfromdb.pop('last_updated'), feedfromdb.pop('name')]
-        probability = feedfromdb.get('probability')
-        if probability is not None:
-            feed.append(probability)
-        feeds.append(feed)
-    return feeds
-
-def list_feeds(feed_collection):
-    feeds_output = list(feed_collection.find( {}))
-    print(feeds_output)
-    feeds = []
-    for feedfromdb in feeds_output:
-        feeds.append(feedfromdb.pop('feed'))
-    return feeds
 
 def remove_email(email,email_collection):
     email_collection.delete_one({"email": email})
@@ -555,7 +343,8 @@ def some_long_task(app):
 
     # Run the task
     while True:
-        send_email_about_new_articles_in_all_feeds(app.feed_collection,app.smtp_collection,app.email_collection,app.articlescollection)
+        process_feeds = feeds.FeedProcessor(app.feed_collection, app.smtp_collection, app.email_collection, app.articles_collection)
+        process_feeds.process_all_feeds_and_send_email()
         print('Ran the task!')
         # This could be any long running task, just a delay as an example
         time.sleep(900)
@@ -674,7 +463,8 @@ def remove_email_route():
 @app.route('/api/feeds', methods=['GET'])
 @require_api_key
 def feeds():
-    return jsonify(list_feeds(app.feed_collection)), 200
+    feeds_object = feeds.FeedProcessor(app.feed_collection, app.smtp_collection, app.email_collection, app.articles_collection)
+    return jsonify(feeds_object.list_feeds()), 200
 
 @app.route('/api/add_feed', methods=['POST'])
 @require_api_key
@@ -748,7 +538,8 @@ def get_current_time_route():
 @app.route('/api/list_feeds_with_last_updated', methods=['GET'])
 @require_api_key
 def list_feeds_with_last_updated_route():
-    return jsonify(list_feeds_with_last_updated(app.feed_collection)), 200
+    feeds_object = feeds.FeedProcessor(app.feed_collection, app.smtp_collection, app.email_collection, app.articles_collection)
+    return jsonify(feeds_object.list_feeds_with_last_updated()), 200
 
 @app.route('/api/get_feed_last_updated', methods=['POST'])
 @require_api_key
@@ -775,7 +566,7 @@ def change_feed_last_updated_route():
 def download_articles_in_feed_and_update_last_updated_route():
     url = request.form.get('feedurl')
     if url:
-        send_email_about_new_articles_in_feed(url, app.feed_collection, app.smtp_collection, app.email_collection, app.articlescollection)
+        feeds.send_email_about_new_articles_in_feed(url, app.feed_collection, app.smtp_collection, app.email_collection, app.articlescollection)
         return jsonify("success"), 200
     else:
         return jsonify({'error': 'No URL provided.'}), 400
@@ -813,7 +604,7 @@ def send_test_email_route():
 def send_email_about_new_articles_in_feed_route():
     feedurl = request.form.get('feedurl')
     if feedurl:
-        send_email_about_new_articles_in_feed(feedurl,app.feed_collection,app.smtp_collection,app.email_collection,app.articlescollection)
+        feeds.send_email_about_new_articles_in_feed(feedurl,app.feed_collection,app.smtp_collection,app.email_collection,app.articlescollection)
         return jsonify({'message': 'Email sent.'}), 200
     else:
         return jsonify({'error': 'No feed URL provided.'}), 400
@@ -827,7 +618,7 @@ def get_smtp_data_route():
 @app.route('/api/send_email_about_new_articles_in_all_feeds', methods=['GET'])
 @require_api_key
 def send_email_about_new_articles_in_all_feeds_route():
-    send_email_about_new_articles_in_all_feeds(app.feed_collection,app.smtp_collection,app.email_collection,app.articlescollection)
+    feeds.send_email_about_new_articles_in_all_feeds(app.feed_collection,app.smtp_collection,app.email_collection,app.articlescollection)
     return jsonify({'message': 'Email sent.'}), 200
 
 @app.route('/api/has_valid_api_key', methods=['GET'])

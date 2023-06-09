@@ -1,17 +1,12 @@
 '''
 Copyright 2023 by Theodore Jones tjones2@fastmail.com 
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+This code is licensed under the The Parity Public License 7.0.0
 
-       http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+As far as the law allows, this software comes as is, without any 
+warranty or condition, and the contributor won't be liable to anyone
+ for any damages related to this software or this license, 
+ under any kind of legal claim.
 '''
 
 from flask import request, jsonify, Flask, current_app, make_response, render_template, redirect, url_for
@@ -24,30 +19,16 @@ from functools import wraps
 import datetime
 import threading
 import time
-import sys
-
-import feedparser
-import mf2py
-
 import requests
 from bs4 import BeautifulSoup
-
 import smtplib
-
-import atexit
 import threading
-
 import hashlib
 import uuid
-
-import random
-
 from waitress import serve
-
 from html_sanitizer import Sanitizer
-import bleach
-
 import feeds
+from bs4 import BeautifulSoup
 
 users_currently_authenticating = {}
 
@@ -58,9 +39,6 @@ def get_first_email(email_collection):
     email_output = list(email_collection.find( {}))
     email = email_output[0].pop('email')
     return email
-
-import bleach
-from bs4 import BeautifulSoup
 
 def send_email(email, subject, body, name, smtp_collection, email_collection):
     smtp_host, smtp_port, smtp_username, smtp_password = get_smtp_data(smtp_collection)

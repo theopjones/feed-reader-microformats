@@ -5,8 +5,8 @@ This code is licensed under the The Parity Public License 7.0.0
 
 As far as the law allows, this software comes as is, without any 
 warranty or condition, and the contributor won't be liable to anyone
- for any damages related to this software or this license, 
- under any kind of legal claim.
+for any damages related to this software or this license, 
+under any kind of legal claim.
 '''
 
 from flask import request, jsonify, Flask, current_app, make_response, render_template, redirect, url_for
